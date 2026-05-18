@@ -33,12 +33,6 @@ echo_error() {
 ospf_setup() {
     echo_info "Выбрана настройка OSPF (FRR)"
 
-    # Проверка root
-    if [[ $EUID -ne 0 ]]; then
-        echo_error "Скрипт должен запускаться от root"
-        return 1
-    fi
-
     # Проверка FRR
     if ! rpm -q frr >/dev/null 2>&1; then
         echo_warn "FRR не установлен"
@@ -55,14 +49,6 @@ ospf_setup() {
 
     # Получение интерфейсов
     local if_list=($(get_interfaces_list))
-
-    # Router-ID
-    read -p "Введите router-id (пример 1.1.1.1): " router_id
-
-    if [[ -z "$router_id" ]]; then
-        echo_error "Router-ID не может быть пустым"
-        return 1
-    fi
 
     declare -A iface_costs
 
@@ -151,7 +137,6 @@ hostname ospf-router
 service integrated-vtysh-config
 
 router ospf
- ospf router-id $router_id
 EOF
 
     # Автоматически добавляем сети интерфейсов в area 0
