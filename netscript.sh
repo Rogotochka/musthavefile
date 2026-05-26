@@ -28,6 +28,109 @@ echo_error() {
 }
 #echo_error "ERROR!!!"
 
+# Функция генерации сертификатов и ключей
+certificates_setup(){
+    echo_info "Настройка PKI и генерация сертификатов"
+
+    # Проверка openssl
+    if ! command -v openssl >/dev/null 2>&1; then
+        echo_warn "OpenSSL не установлен"
+        read -p "Установить openssl?[Y/n]: " install_ssl
+
+        if [[ ! "$install_ssl" =~ ^[NnтТ]$ ]]; then
+            apt-get update
+            apt-get install -y openssl
+        else
+            echo_error "OpenSSL необходим для генерации сертификатов"
+            return 1
+        fi
+    fi
+
+    # Каталог хранения
+    CERT_DIR="/etc/strongswan/pki"
+
+    mkdir -p "$CERT_DIR"/{cacerts,certs,private,csr}
+
+    echo_info "Каталог PKI: $CERT_DIR"
+
+    # =========================
+    # Создание Root CA
+    # =========================
+
+    read -p "Введите имя корневого сертификата [RootCA]: " ca_name
+    ca_name=${ca_name:-RootCA}
+
+    read -p "Введите срок действия CA (дней) [3650]: " ca_days
+    ca_days=${ca_days:-3650}
+
+    echo_info "Генерация ключа Root CA"
+
+    openssl genrsa -out "$CERT_DIR/private/${ca_name}.key" 4096
+
+    chmod 600 "$CERT_DIR/private/${ca_name}.key"
+
+    echo_info "Создание самоподписанного Root CA сертификата"
+
+    openssl req -x509 -new -nodes \
+        -key "$CERT_DIR/private/${ca_name}.key" \
+        -sha256 \
+        -days "$ca_days" \
+        -out "$CERT_DIR/cacerts/${ca_name}.crt" \
+        -subj "/C=RU/ST=MSK/L=Moscow/O=NetScript/CN=${ca_name}"
+
+    echo_info "Root CA создан"
+
+    # =========================
+    # Генерация пользовательских сертификатов
+    # =========================
+
+    while true; do
+        echo
+        read -p "Введите имя пользователя/хоста сертификата (или 'exit' для завершения): " user_name
+
+        if [[ "$user_name" == "exit" ]]; then
+            break
+        fi
+
+        read -p "Введите срок действия сертификата (дней) [825]: " user_days
+        user_days=${user_days:-825}
+
+        echo_info "Генерация ключа для $user_name"
+
+        openssl genrsa -out "$CERT_DIR/private/${user_name}.key" 2048
+
+        chmod 600 "$CERT_DIR/private/${user_name}.key"
+
+        echo_info "Создание CSR для $user_name"
+
+        openssl req -new \
+            -key "$CERT_DIR/private/${user_name}.key" \
+            -out "$CERT_DIR/csr/${user_name}.csr" \
+            -subj "/C=RU/ST=MSK/L=Moscow/O=NetScript/CN=${user_name}"
+
+        echo_info "Подпись сертификата $user_name корневым CA"
+
+        openssl x509 -req \
+            -in "$CERT_DIR/csr/${user_name}.csr" \
+            -CA "$CERT_DIR/cacerts/${ca_name}.crt" \
+            -CAkey "$CERT_DIR/private/${ca_name}.key" \
+            -CAcreateserial \
+            -out "$CERT_DIR/certs/${user_name}.crt" \
+            -days "$user_days" \
+            -sha256
+
+        echo_info "Сертификат для $user_name успешно создан"
+
+        echo "----------------------------------------"
+        echo "Сертификат: $CERT_DIR/certs/${user_name}.crt"
+        echo "Ключ:       $CERT_DIR/private/${user_name}.key"
+        echo "CA:         $CERT_DIR/cacerts/${ca_name}.crt"
+        echo "----------------------------------------"
+    done
+
+    echo_info "Генерация сертификатов завершена"
+}
+
 # Функция настройки GRE over IPsec
 ipsec_gre_setup(){
     echo_info "Настройка GRE over IPsec"
