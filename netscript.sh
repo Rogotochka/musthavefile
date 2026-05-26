@@ -30,6 +30,70 @@ echo_error() {
 
 #мб сделать проверку на роот
 
+  # Функция настройки GRE over IPsec
+ipsec_gre_setup(){
+    echo_info "Настройка GRE over IPsec"
+
+    # Проверка пакетов
+    if ! rpm -q strongswan >/dev/null 2>&1; then
+        echo_warn "strongSwan не установлен"
+        read -p "Установить strongSwan?[Y/n]: " install_ipsec
+
+        if [[ ! "$install_ipsec" =~ ^[NnтТ]$ ]]; then
+            apt-get update
+            apt-get install -y strongswan
+        else
+            echo_error "strongSwan необходим для IPsec"
+            return 1
+        fi
+    fi
+
+    echo_info "Выбор интерфейса для внешнего подключения"
+
+    local if_list=($(get_interfaces_list))
+    get_network_info
+
+    read -p "Введите номер WAN интерфейса: " wan_num
+    wan_iface=${if_list[$wan_num]}
+
+    if [[ -z "$wan_iface" ]]; then
+        echo_error "Неверный интерфейс"
+        return 1
+    fi
+
+    # GRE параметры
+    read -p "Введите локальный WAN IP: " local_wan_ip
+    read -p "Введите удалённый WAN IP: " remote_wan_ip
+
+    read -p "Введите GRE local tunnel IP/mask (пример 10.10.10.1/30): " gre_local_ip
+    read -p "Введите GRE remote tunnel IP: " gre_remote_ip
+
+    gre_name=gre1
+
+    # Выбор метода аутентификации
+    echo
+    echo "Выберите метод аутентификации IPsec"
+    echo "1) PSK"
+    echo "2) CERT"
+
+    read -p "Ваш выбор [1-2]: " auth_method
+
+    mkdir -p /etc/net/ifaces/$gre_name
+
+    echo_info "Создание GRE интерфейса в etcnet"
+
+    cat > /etc/net/ifaces/$gre_name/options << EOF
+TYPE=iptun
+TUNTYPE=gre
+TUNLOCAL=$local_wan_ip
+TUNREMOTE=$remote_wan_ip
+HOST=$wan_iface
+ONBOOT=yes
+BOOTPROTO=static
+EOF
+
+}
+
 ospf_setup() {
     echo_info "Выбрана настройка OSPF (FRR)"
 
@@ -441,7 +505,8 @@ main() {
 	echo "4) Настройка коммутатора"
 	echo "5) Настройка агрегирования"
 	echo "6) Настройка OSPF"
-    echo "7) Выход"
+	echo "7) Настройка GRE over IPsec"
+    echo "8) Выход"
 	read -p "Ваш выбор [1-6]: " choice
 	case $choice in
 	    1)
@@ -463,6 +528,9 @@ main() {
    		ospf_setup
     	;;
 		7)
+		ipsec_gre_setup
+		;;
+		8)
     	echo_info "Выход"
     	exit 0
     	;;
