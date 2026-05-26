@@ -31,6 +31,23 @@ echo_error() {
 #мб сделать проверку на роот
 
   # Функция настройки GRE over IPsec
+# Реализация GRE over IPsec для данного скрипта
+
+Ниже приведён пример расширения вашего скрипта для настройки GRE over IPsec с поддержкой:
+
+* GRE через etcnet
+* IPsec через strongSwan
+* Выбор метода аутентификации:
+
+  * PSK (Pre-Shared Key)
+  * CERT (сертификаты)
+
+Добавьте данный блок в ваш скрипт перед функцией `main()`.
+
+---
+
+```bash
+# Функция настройки GRE over IPsec
 ipsec_gre_setup(){
     echo_info "Настройка GRE over IPsec"
 
@@ -68,7 +85,8 @@ ipsec_gre_setup(){
     read -p "Введите GRE local tunnel IP/mask (пример 10.10.10.1/30): " gre_local_ip
     read -p "Введите GRE remote tunnel IP: " gre_remote_ip
 
-    gre_name=gre1
+    read -p "Введите имя GRE интерфейса [gre1]: " gre_name
+    gre_name=${gre_name:-gre1}
 
     # Выбор метода аутентификации
     echo
@@ -92,6 +110,83 @@ ONBOOT=yes
 BOOTPROTO=static
 EOF
 
+    cat > /etc/net/ifaces/$gre_name/ipv4address << EOF
+$gre_local_ip
+EOF
+
+    echo_info "Настройка IPsec"
+
+    mkdir -p /etc/strongswan
+
+    cat > /etc/strongswan/ipsec.conf << EOF
+config setup
+    charondebug="ike 1, knl 1, cfg 0"
+
+conn gre-ipsec
+    auto=start
+    type=tunnel
+    keyexchange=ikev2
+    authby=$( [[ "$auth_method" == "1" ]] && echo "secret" || echo "pubkey" )
+    left=$local_wan_ip
+    leftsubnet=$local_wan_ip/32
+    right=$remote_wan_ip
+    rightsubnet=$remote_wan_ip/32
+    ike=aes256-sha256-modp2048!
+    esp=aes256-sha256!
+    dpdaction=restart
+    dpddelay=30s
+EOF
+
+    if [[ "$auth_method" == "1" ]]; then
+        echo_info "Выбран метод PSK"
+
+        read -p "Введите PSK ключ: " psk_key
+
+        cat > /etc/strongswan/ipsec.secrets << EOF
+$local_wan_ip $remote_wan_ip : PSK "$psk_key"
+EOF
+
+    elif [[ "$auth_method" == "2" ]]; then
+        echo_info "Выбран метод CERT"
+
+        echo "Скопируйте сертификаты в:"
+        echo "/etc/strongswan/ipsec.d/certs/"
+        echo "/etc/strongswan/ipsec.d/private/"
+
+        read -p "Введите имя локального сертификата: " local_cert
+        read -p "Введите имя локального ключа: " local_key
+
+        cat >> /etc/strongswan/ipsec.conf << EOF
+    leftcert=$local_cert
+EOF
+
+        cat > /etc/strongswan/ipsec.secrets << EOF
+: RSA $local_key
+EOF
+
+    else
+        echo_error "Неверный метод аутентификации"
+        return 1
+    fi
+
+    chmod 600 /etc/strongswan/ipsec.secrets
+
+    echo_info "Включение IP forwarding"
+
+    if ! grep -q "net.ipv4.ip_forward = 1" /etc/sysctl.conf; then
+        echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+    fi
+
+    sysctl -p
+
+    echo_info "Перезапуск сервисов"
+
+    systemctl enable strongswan
+    systemctl restart strongswan
+
+    apply_network_config
+
+    echo_info "GRE over IPsec успешно настроен"
 }
 
 ospf_setup() {
