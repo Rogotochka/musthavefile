@@ -28,25 +28,6 @@ echo_error() {
 }
 #echo_error "ERROR!!!"
 
-#мб сделать проверку на роот
-
-  # Функция настройки GRE over IPsec
-# Реализация GRE over IPsec для данного скрипта
-
-Ниже приведён пример расширения вашего скрипта для настройки GRE over IPsec с поддержкой:
-
-* GRE через etcnet
-* IPsec через strongSwan
-* Выбор метода аутентификации:
-
-  * PSK (Pre-Shared Key)
-  * CERT (сертификаты)
-
-Добавьте данный блок в ваш скрипт перед функцией `main()`.
-
----
-
-```bash
 # Функция настройки GRE over IPsec
 ipsec_gre_setup(){
     echo_info "Настройка GRE over IPsec"
