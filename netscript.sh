@@ -162,8 +162,8 @@ EOF
 
     echo_info "Перезапуск сервисов"
 
-    systemctl enable strongswan
-    systemctl restart strongswan
+    systemctl enable strongswan-starter
+    systemctl restart strongswan-starter
 
     apply_network_config
 
