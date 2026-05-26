@@ -685,8 +685,9 @@ main() {
 	echo "5) Настройка агрегирования"
 	echo "6) Настройка OSPF"
 	echo "7) Настройка GRE over IPsec"
-    echo "8) Выход"
-	read -p "Ваш выбор [1-6]: " choice
+    echo "8) Настройка сертификаты"
+	echo "9) Выход"
+	read -p "Ваш выбор [1-9]: " choice
 	case $choice in
 	    1)
 		setup_interface
@@ -710,6 +711,9 @@ main() {
 		ipsec_gre_setup
 		;;
 		8)
+		certificates_setup
+		;;
+		9)
     	echo_info "Выход"
     	exit 0
     	;;
